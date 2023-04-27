@@ -29,7 +29,6 @@ window.addEventListener('keyup', (event) => {
   keyState[event.code] = false;
 });
 
-
 // Event listener for window resizing
 window.addEventListener('resize', onWindowResize, false);
 
@@ -39,19 +38,56 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Set up the game loop
-function animate() {
-  requestAnimationFrame(animate);
+// Scoring system
+let score = 0;
+const scoreElement = document.createElement('div');
+scoreElement.style.position = 'absolute';
+scoreElement.style.top = '10px';
+scoreElement.style.right = '10px';
+scoreElement.style.color = 'white';
+document.body.appendChild(scoreElement);
+updateScoreDisplay();
 
-  // Update player, enemy, defender, and obstacles
-  updatePlayer();
-  updateEnemy();
-  updateDefender();
-  updateObstacles();
-
-  // Render the scene
-  renderer.render(scene, camera);
+function updateScoreDisplay() {
+  scoreElement.innerHTML = `Score: ${score}`;
 }
+
+// Win/Lose condition
+const maxScore = 10;
+
+function checkWinLoseCondition() {
+  if (score >= maxScore) {
+    alert('Congratulations! You won!');
+    resetGame();
+  }
+  if (player.position.distanceTo(enemy.position) < 2) {
+    alert('You lost! The enemy caught you.');
+    resetGame();
+  }
+}
+
+function resetGame() {
+  // Reset player, enemy, and defender positions
+  player.position.set(0, 0, 0);
+  enemy.position.set(-5, 0, 0);
+  defender.position.set(5, 0, 0);
+
+  // Clear all obstacles and remove them from the scene
+  for (const obstacle of obstacles) {
+    scene.remove(obstacle);
+  }
+  obstacles.length = 0;
+
+  // Reset score and update display
+  score = 0;
+  updateScoreDisplay();
+}
+
+// Game boundary
+const gameBoundary = new THREE.Box3(
+  new THREE.Vector3(-10, -10, -1),
+  new THREE.Vector3(10, 10, 1)
+);
 
 function createAvatar(color, x, y) {
   const geometry = new THREE.SphereGeometry(1, 32, 32);
@@ -64,78 +100,34 @@ function createAvatar(color, x, y) {
 
 function updatePlayer() {
   const speed = 0.1;
-  if (keyState['ArrowUp']) player.position.y += speed;
-  if (keyState['ArrowDown']) player.position.y -= speed;
-  if (keyState['ArrowLeft']) player.position.x -= speed;
-  if (keyState['ArrowRight']) player.position.x += speed;
-}
+  const newPosition = player.position.clone();
 
+  if (keyState['ArrowUp']) newPosition.y += speed;
+  if (keyState['ArrowDown']) newPosition.y -= speed;
+  if (keyState['ArrowLeft']) newPosition.x -= speed;
+  if (keyState['ArrowRight']) newPosition.x += speed;
+
+  // Check if new position is within game boundary
+  if (gameBoundary.containsPoint(newPosition)) {
+    player.position.copy(newPosition);
+  }
+}
 
 function updateEnemy() {
   // Implement enemy behavior to block the player
+  const enemySpeed = 0.02;
+  const direction = player.position.clone().sub(enemy.position).normalize();
+  enemy.position.add(direction.multiplyScalar(enemySpeed));
 }
 
-let defenderState = "awake";
-let stateStartTime = performance.now();
+function animate() {
+  requestAnimationFrame(animate);
 
-function updateDefender() {
-  const defenderSpeed = 0.05;
-  const currentTime = performance.now();
-  const elapsedTime = currentTime - stateStartTime;
+  updatePlayer();
+  updateEnemy();
+  checkWinLoseCondition();
 
-  if (defenderState === "awake") {
-    if (elapsedTime > 6000) { // Awake for 6 seconds
-      defenderState = "asleep";
-      stateStartTime = currentTime;
-    } else {
-      const diffX = enemy.position.x - defender.position.x;
-      const diffY = enemy.position.y - defender.position.y;
-      if (Math.abs(diffX) > Math.abs(diffY)) {
-        defender.position.x += Math.sign(diffX) * defenderSpeed;
-      } else {
-        defender.position.y += Math.sign(diffY) * defenderSpeed;
-      }
-    }
-  } else if (defenderState === "asleep") {
-    if (elapsedTime > 3000) { // Sleep for 3 seconds
-      defenderState = "awake";
-      stateStartTime = currentTime;
-    }
-  }
+  renderer.render(scene, camera);
 }
 
-
-function updateObstacles() {
-  // Update obstacle positions
-  for (let i = 0; i < obstacles.length; i++) {
-    const obstacle = obstacles[i];
-    obstacle.position.x += (Math.random() - 0.5) * 0.1;
-    obstacle.position.y += (Math.random() - 0.5) * 0.1;
-
-    // Remove obstacles that move off-screen
-    if (obstacle.position.x < -20 || obstacle.position.x > 20 || obstacle.position.y < -20 || obstacle.position.y > 20) {
-      scene.remove(obstacle);
-      obstacles.splice(i, 1);
-      i--;
-    }
-  }
-
-  // Periodically spawn new obstacles
-  if (Math.random() < 0.01) {
-    const color = Math.random() * 0xffffff;
-    const x = (Math.random() - 0.5) * 20;
-    const y = (Math.random() - 0.5) * 20;
-    const obstacle = spawnObstacle(color, x, y);
-    obstacles.push(obstacle);
-  }
-}
-
-function spawnObstacle(color, x, y) {
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
-  const material = new THREE.MeshPhongMaterial({ color: color });
-  const obstacle = new THREE.Mesh(geometry, material);
-  obstacle.position.set(x, y, 0);
-  scene.add(obstacle);
-  return obstacle;
-}
 animate();
